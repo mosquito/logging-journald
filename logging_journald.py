@@ -96,8 +96,6 @@ class JournaldLogHandler(logging.Handler):
         "threadName": "thread_name",
     })
 
-    JOURNAL_STREAM = check_journal_stream()
-
     __slots__ = ("__facility", "socket", "__identifier")
 
     if hasattr(os, "memfd_create"):

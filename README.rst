@@ -7,7 +7,7 @@ native protocol.
 .. code-block:: python
 
     import logging
-    from logging_journald import JournaldLogHandler
+    from logging_journald import JournaldLogHandler, check_journal_stream
 
     # Use python default handler
     LOG_HANDLERS = None
@@ -15,7 +15,7 @@ native protocol.
 
     if (
         # Check if program running as systemd service
-        JournaldLogHandler.JOURNAL_STREAM or
+        check_journal_stream() or
         # Check if journald socket is available
         JournaldLogHandler.SOCKET_PATH.exists()
     ):

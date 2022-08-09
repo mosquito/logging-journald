@@ -3,7 +3,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="logging-journald",
-    version="0.6.0",
+    version="0.6.1",
     author="Dmitry Orlov",
     author_email="me@mosquito.su",
     license="MIT",
