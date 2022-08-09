@@ -1,9 +1,9 @@
-from setuptools import find_packages, setup
+from setuptools import setup
 
 
 setup(
     name="logging-journald",
-    version="0.6.1",
+    version="0.6.2",
     author="Dmitry Orlov",
     author_email="me@mosquito.su",
     license="MIT",
