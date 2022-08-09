@@ -24,7 +24,7 @@ setup(
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: Implementation :: CPython",
     ],
-    packages=[""],
+    packages=[],
     python_requires=">=3.7, <4",
     url="https://github.com/mosquito/logging-journald",
     project_urls={
