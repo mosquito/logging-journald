@@ -7,18 +7,18 @@ from collections import deque
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Deque, Mapping, Any, Tuple
-
-from pytest_subtests import SubTests
+from typing import Any, Deque, Mapping, Tuple
 
 import aiomisc
 from aiomisc import bind_socket, threaded
 from aiomisc.service import UDPServer
+from pytest_subtests import SubTests
+
 from logging_journald import JournaldLogHandler
 
 
 def test_journald_logger(
-    loop: asyncio.AbstractEventLoop, subtests: SubTests
+    loop: asyncio.AbstractEventLoop, subtests: SubTests,
 ) ->  None:
     with TemporaryDirectory(dir="/tmp") as tmp_dir:
         tmp_path = Path(tmp_dir)
@@ -30,7 +30,7 @@ def test_journald_logger(
             VALUE_LEN_STRUCT = struct.Struct("@Q")
 
             def handle_datagram(
-                self, data: bytes, addr: Tuple[Any, ...]
+                self, data: bytes, addr: Tuple[Any, ...],
             ) -> None:
                 result = {}
                 with BytesIO(data) as fp:

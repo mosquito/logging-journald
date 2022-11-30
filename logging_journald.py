@@ -103,7 +103,7 @@ class JournaldLogHandler(logging.Handler):
         def memfd_open(*args: Any, **kwargs: Any) -> IO[bytes]:
             """ Return memfd file-like object """
             fd: int = os.memfd_create(                      # type: ignore
-                tempfile.mktemp(), os.MFD_ALLOW_SEALING     # type: ignore
+                tempfile.mktemp(), os.MFD_ALLOW_SEALING,     # type: ignore
             )
             return os.fdopen(fd, *args, **kwargs)
 
