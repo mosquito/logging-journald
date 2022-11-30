@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "logging-journald"
-version = "0.6.3"
+version = "0.6.4"
 description = "Pure python logging handler for writing logs to the journald using native protocol"
 authors = ["Dmitry Orlov <me@mosquito.su>"]
 readme = "README.md"
