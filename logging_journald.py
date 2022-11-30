@@ -102,8 +102,8 @@ class JournaldLogHandler(logging.Handler):
         @staticmethod
         def memfd_open(*args: Any, **kwargs: Any) -> IO[bytes]:
             """ Return memfd file-like object """
-            fd: int = os.memfd_create(                      # type: ignore
-                tempfile.mktemp(), os.MFD_ALLOW_SEALING,     # type: ignore
+            fd: int = os.memfd_create(
+                tempfile.mktemp(), os.MFD_ALLOW_SEALING,
             )
             return os.fdopen(fd, *args, **kwargs)
 
@@ -112,9 +112,9 @@ class JournaldLogHandler(logging.Handler):
             fp.flush()
             fcntl.fcntl(
                 fp.fileno(),
-                fcntl.F_ADD_SEALS,                          # type: ignore
-                fcntl.F_SEAL_SHRINK | fcntl.F_SEAL_GROW |   # type: ignore
-                fcntl.F_SEAL_WRITE | fcntl.F_SEAL_SEAL,     # type: ignore
+                fcntl.F_ADD_SEALS,
+                fcntl.F_SEAL_SHRINK | fcntl.F_SEAL_GROW |
+                fcntl.F_SEAL_WRITE | fcntl.F_SEAL_SEAL,
             )
     else:
         @staticmethod
