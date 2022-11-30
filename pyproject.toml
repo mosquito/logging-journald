@@ -36,3 +36,15 @@ mypy = "^0.991"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.mypy]
+allow_subclassing_any = true
+allow_untyped_calls = true
+allow_untyped_decorators = true
+ignore_missing_imports = true
+implicit_reexport = true
+pretty = true
+show_error_codes = true
+strict = true
+warn_return_any = false
+files = "logging_journald.py, tests"
