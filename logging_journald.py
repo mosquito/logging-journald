@@ -12,7 +12,7 @@ from enum import IntEnum, unique
 from io import BytesIO
 from pathlib import Path
 from types import MappingProxyType
-from typing import IO, Any
+from typing import IO, Any, Optional
 
 
 @unique
@@ -100,9 +100,11 @@ class JournaldLogHandler(logging.Handler):
 
     if hasattr(os, "memfd_create"):
         @staticmethod
-        def memfd_open(*args, **kwargs) -> IO[bytes]:
+        def memfd_open(*args: Any, **kwargs: Any) -> IO[bytes]:
             """ Return memfd file-like object """
-            fd = os.memfd_create(tempfile.mktemp(), os.MFD_ALLOW_SEALING)
+            fd: int = os.memfd_create(                      # type: ignore
+                tempfile.mktemp(), os.MFD_ALLOW_SEALING     # type: ignore
+            )
             return os.fdopen(fd, *args, **kwargs)
 
         @staticmethod
@@ -110,13 +112,13 @@ class JournaldLogHandler(logging.Handler):
             fp.flush()
             fcntl.fcntl(
                 fp.fileno(),
-                fcntl.F_ADD_SEALS,
-                fcntl.F_SEAL_SHRINK | fcntl.F_SEAL_GROW |
-                fcntl.F_SEAL_WRITE | fcntl.F_SEAL_SEAL,
+                fcntl.F_ADD_SEALS,                          # type: ignore
+                fcntl.F_SEAL_SHRINK | fcntl.F_SEAL_GROW |   # type: ignore
+                fcntl.F_SEAL_WRITE | fcntl.F_SEAL_SEAL,     # type: ignore
             )
     else:
         @staticmethod
-        def memfd_open(*args, **kwargs) -> IO[bytes]:
+        def memfd_open(*args: Any, **kwargs: Any) -> IO[bytes]:
             """ Return python temporary file object """
             return tempfile.TemporaryFile(*args, **kwargs)
 
@@ -162,7 +164,7 @@ class JournaldLogHandler(logging.Handler):
         return
 
     def __init__(
-        self, identifier: str = None,
+        self, identifier: Optional[str] = None,
         facility: int = Facility.LOCAL7,
     ):
         super().__init__()
@@ -229,7 +231,7 @@ class JournaldLogHandler(logging.Handler):
 
         self.pack(fp, "extra", source)
 
-    def _fallback(self, record) -> None:
+    def _fallback(self, record: logging.LogRecord) -> None:
         sys.stderr.write("Unable to write message ")
         sys.stderr.write(repr(self.format(record)))
         sys.stderr.write(" to journald\n")

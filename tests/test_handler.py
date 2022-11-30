@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import socket
@@ -6,6 +7,9 @@ from collections import deque
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Deque, Mapping, Any, Tuple
+
+from pytest_subtests import SubTests
 
 import aiomisc
 from aiomisc import bind_socket, threaded
@@ -13,17 +17,21 @@ from aiomisc.service import UDPServer
 from logging_journald import JournaldLogHandler
 
 
-def test_journald_logger(loop, subtests):
+def test_journald_logger(
+    loop: asyncio.AbstractEventLoop, subtests: SubTests
+) ->  None:
     with TemporaryDirectory(dir="/tmp") as tmp_dir:
         tmp_path = Path(tmp_dir)
         sock_path = tmp_path / "notify.sock"
 
-        logs = deque()
+        logs: Deque[Mapping[str, Any]] = deque()
 
         class FakeJournald(UDPServer):
             VALUE_LEN_STRUCT = struct.Struct("@Q")
 
-            def handle_datagram(self, data: bytes, addr: tuple) -> None:
+            def handle_datagram(
+                self, data: bytes, addr: Tuple[Any, ...]
+            ) -> None:
                 result = {}
                 with BytesIO(data) as fp:
                     line = fp.readline()
@@ -49,7 +57,7 @@ def test_journald_logger(loop, subtests):
                 logs.append(result)
 
         @threaded
-        def log_writer():
+        def log_writer() -> None:
             log = logging.getLogger("test")
             log.propagate = False
             log.handlers.clear()
