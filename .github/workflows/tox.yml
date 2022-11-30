@@ -35,7 +35,7 @@ jobs:
       - run: poetry install
 
       - name: pytest
-        run: poetry run pytest
+        run: poetry run pytest -vv
         env:
           COVERALLS_PARALLEL: 'true'
           COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
