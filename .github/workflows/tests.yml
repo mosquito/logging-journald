@@ -59,7 +59,7 @@ jobs:
       - run: poetry install
 
       - name: pytest
-        run: poetry run pytest pytest -vv --cov=logging_journald --cov-report=term-missing --pylama
+        run: poetry run pytest -vv --cov=logging_journald --cov-report=term-missing --pylama
         env:
           FORCE_COLOR: 1
 

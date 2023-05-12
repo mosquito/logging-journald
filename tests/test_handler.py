@@ -18,7 +18,7 @@ from pytest_subtests import SubTests
 from logging_journald import check_journal_stream, JournaldLogHandler, Facility
 
 
-def test_check_journal_stream():
+def test_check_journal_stream() -> None:
     stat = os.stat(sys.stderr.fileno())
     os.environ['JOURNAL_STREAM'] = f"{stat.st_dev}:{stat.st_ino}"
     assert check_journal_stream()
@@ -30,7 +30,7 @@ def test_check_journal_stream():
     assert not check_journal_stream()
 
 
-def test_facility():
+def test_facility() -> None:
     assert Facility(0) == Facility.KERN
     assert Facility['KERN'] == Facility.KERN
 
