@@ -262,6 +262,7 @@ class JournaldLogHandler(logging.Handler):
 
 
 __all__ = (
+    "Facility",
     "JournaldLogHandler",
     "check_journal_stream",
 )

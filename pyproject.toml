@@ -36,6 +36,7 @@ aiomisc = "^16.2.10"
 mypy = "^0.991"
 coveralls = "^3.3.1"
 pytest-cov = "^4.0.0"
+pylama = {extras = ["toml"], version = "^8.4.1"}
 
 [build-system]
 requires = ["poetry-core"]
@@ -52,3 +53,10 @@ show_error_codes = true
 strict = true
 warn_return_any = false
 files = "logging_journald.py, tests"
+
+[tool.pylama]
+max_line_length = 80
+skip = "*/.venv/*, */.tox/*, */mypy_cache/*, ./dist, ./docs"
+
+[tool.pylama.linter.mccabe]
+max-complexity = 15

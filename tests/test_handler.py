@@ -3,6 +3,7 @@ import logging
 import os
 import socket
 import struct
+import sys
 from collections import deque
 from io import BytesIO
 from pathlib import Path
@@ -14,12 +15,29 @@ from aiomisc import bind_socket, threaded
 from aiomisc.service import UDPServer
 from pytest_subtests import SubTests
 
-from logging_journald import JournaldLogHandler
+from logging_journald import check_journal_stream, JournaldLogHandler, Facility
+
+
+def test_check_journal_stream():
+    stat = os.stat(sys.stderr.fileno())
+    os.environ['JOURNAL_STREAM'] = f"{stat.st_dev}:{stat.st_ino}"
+    assert check_journal_stream()
+
+    os.environ['JOURNAL_STREAM'] = ""
+    assert not check_journal_stream()
+
+    del os.environ['JOURNAL_STREAM']
+    assert not check_journal_stream()
+
+
+def test_facility():
+    assert Facility(0) == Facility.KERN
+    assert Facility['KERN'] == Facility.KERN
 
 
 def test_journald_logger(
     loop: asyncio.AbstractEventLoop, subtests: SubTests,
-) ->  None:
+) -> None:
     with TemporaryDirectory(dir="/tmp") as tmp_dir:
         tmp_path = Path(tmp_dir)
         sock_path = tmp_path / "notify.sock"
