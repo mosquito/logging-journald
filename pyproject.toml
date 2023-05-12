@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "logging-journald"
-version = "0.6.5"
+version = "0.6.6"
 license = "MIT"
 description = "Pure python logging handler for writing logs to the journald using native protocol"
 authors = ["Dmitry Orlov <me@mosquito.su>"]
@@ -15,6 +15,7 @@ classifiers = [
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: Implementation :: CPython",
 ]
 packages = [
@@ -33,6 +34,8 @@ pytest = "^7.2.0"
 pytest-subtests = "^0.9.0"
 aiomisc = "^16.2.10"
 mypy = "^0.991"
+coveralls = "^3.3.1"
+pytest-cov = "^4.0.0"
 
 [build-system]
 requires = ["poetry-core"]
