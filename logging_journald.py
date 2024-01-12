@@ -240,7 +240,6 @@ class JournaldLogHandler(logging.Handler):
         )
 
         source = dict(record.__dict__)
-
         for field, name in self.RECORD_FIELDS_MAP.items():
             value = source.pop(field, None)
             if name is None or value is None:
