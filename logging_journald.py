@@ -166,12 +166,14 @@ class JournaldLogHandler(logging.Handler):
     def __init__(
         self, identifier: Optional[str] = None,
         facility: int = Facility.LOCAL7,
+        use_message_id: bool = True,
     ):
         super().__init__()
         self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
         self.socket.connect(str(self.SOCKET_PATH))
         self.__identifier = identifier
         self.__facility = int(facility)
+        self.use_message_id = use_message_id
 
     @staticmethod
     def _to_usec(ts: float) -> int:
@@ -180,10 +182,20 @@ class JournaldLogHandler(logging.Handler):
     def __format_record(
         self, fp: IO[bytes], record: logging.LogRecord,
     ) -> None:
-        message_id = uuid.uuid1().hex
-
-        self.pack(fp, "message", self.format(record))
-        self.pack(fp, "message_id", message_id)
+        message = self.format(record)
+        message_traceback = ""
+        message_level = self.LEVELS[record.levelno]
+        message_facility = self.__facility
+        message_identifier = self.__identifier
+        message_code_string = "{}.{}:{}".format(
+            record.module, record.funcName, record.lineno,
+        )
+        message_code_map = {
+            "func": record.funcName,
+            "file": record.pathname,
+            "line": record.lineno,
+            "module": record.module,
+        }
 
         if record.exc_info:
             exc_type, exc_value, exc_tb = record.exc_info
@@ -196,33 +208,38 @@ class JournaldLogHandler(logging.Handler):
             tb_message = "\n".join(
                 traceback.format_exception(*record.exc_info),
             )
-            self.pack(fp, "traceback", tb_message)
+            message_traceback = tb_message
 
-        self.pack(fp, "priority", self.LEVELS[record.levelno])
-        self.pack(fp, "syslog_facility", self.__facility)
-        self.pack(fp, "syslog_identifier", self.__identifier)
-        self.pack(
-            fp, "code", "{}.{}:{}".format(
-                record.module, record.funcName, record.lineno,
-            ),
-        )
+        self.pack(fp, "message", message)
 
-        self.pack(
-            fp, "code", {
-                "func": record.funcName,
-                "file": record.pathname,
-                "line": record.lineno,
-                "module": record.module,
-            },
-        )
+        if self.use_message_id:
+            message_hash = "\0".join(
+                map(
+                    str,
+                    (
+                        message, traceback, message_level, message_facility,
+                        message_identifier, message_code_string,
+                    ),
+                ),
+            )
+            message_id = uuid.uuid3(uuid.NAMESPACE_OID, message_hash).hex
+            self.pack(fp, "message_id", message_id)
 
+        if message_traceback:
+            self.pack(fp, "traceback", message_traceback)
+
+        self.pack(fp, "priority", message_level)
+        self.pack(fp, "syslog_facility", message_facility)
+        self.pack(fp, "syslog_identifier", message_identifier)
+        self.pack(fp, "code", message_code_string)
+        self.pack(fp, "code", message_code_map)
         self.pack(fp, "created_usec", self._to_usec(record.created))
         self.pack(
-            fp, "relative_usec", self._to_usec(record.relativeCreated),
+            fp, "relative_usec",
+            self._to_usec(record.relativeCreated),
         )
 
         source = dict(record.__dict__)
-
         for field, name in self.RECORD_FIELDS_MAP.items():
             value = source.pop(field, None)
             if name is None or value is None:

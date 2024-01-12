@@ -25,3 +25,27 @@ if (
 logging.basicConfig(level=logging.INFO, handlers=LOG_HANDLERS)
 logging.info("Hello logging world.")
 ```
+
+`MESSAGE_ID` field
+------------------
+
+As defined in [catalog documentation](https://www.freedesktop.org/wiki/Software/systemd/catalog/):
+
+> A `128-bit` message identifier ID for recognizing certain message types, if this is desirable. This should contain a
+128-bit ID formatted as a lower-case hexadecimal string, without any separating dashes or suchlike. This is recommended
+to be a UUID-compatible ID, but this is not enforced, and formatted differently. Developers can generate a new ID for
+this purpose with systemd-id128 new.
+
+So you're free to choose how you want to act. By default, `MESSAGE_ID` is generated as a hash of the message and some
+static fields. But you can disable this by passing `use_message_id=False` to the class constructor.
+
+
+```python
+from logging_journald import JournaldLogHandler
+
+...
+
+handler = JournaldLogHandler(use_message_id=False)
+
+...
+```
