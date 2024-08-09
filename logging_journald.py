@@ -12,7 +12,7 @@ from enum import IntEnum, unique
 from io import BytesIO
 from pathlib import Path
 from types import MappingProxyType
-from typing import IO, Any, Optional, Union, Iterable, Tuple, List
+from typing import IO, Any, Iterable, List, Optional, Tuple, Union
 
 
 @unique
@@ -133,7 +133,7 @@ class JournaldTransport:
 
                 self.memfd_seal(mfp)
                 self.socket.sendmsg(
-                    [], [(socket.SOL_SOCKET, socket.SCM_RIGHTS, array.array("i", [mfp.fileno()]),)],
+                    [], [(socket.SOL_SOCKET, socket.SCM_RIGHTS, array.array("i", [mfp.fileno()]))],
                 )
 
 
@@ -237,8 +237,8 @@ class JournaldLogHandler(logging.Handler):
                 map(
                     str, (
                         message, traceback, message_level, message_facility,
-                        message_identifier, message_code_string
-                    )
+                        message_identifier, message_code_string,
+                    ),
                 ),
             )
             message_id = uuid.uuid3(uuid.NAMESPACE_OID, message_hash).hex

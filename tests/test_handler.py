@@ -15,24 +15,24 @@ from aiomisc import bind_socket, threaded
 from aiomisc.service import UDPServer
 from pytest_subtests import SubTests
 
-from logging_journald import check_journal_stream, JournaldLogHandler, Facility, JournaldTransport
+from logging_journald import Facility, JournaldLogHandler, JournaldTransport, check_journal_stream
 
 
 def test_check_journal_stream() -> None:
     stat = os.stat(sys.stderr.fileno())
-    os.environ['JOURNAL_STREAM'] = f"{stat.st_dev}:{stat.st_ino}"
+    os.environ["JOURNAL_STREAM"] = f"{stat.st_dev}:{stat.st_ino}"
     assert check_journal_stream()
 
-    os.environ['JOURNAL_STREAM'] = ""
+    os.environ["JOURNAL_STREAM"] = ""
     assert not check_journal_stream()
 
-    del os.environ['JOURNAL_STREAM']
+    del os.environ["JOURNAL_STREAM"]
     assert not check_journal_stream()
 
 
 def test_facility() -> None:
     assert Facility(0) == Facility.KERN
-    assert Facility['KERN'] == Facility.KERN
+    assert Facility["KERN"] == Facility.KERN
 
 
 def test_journald_logger(
