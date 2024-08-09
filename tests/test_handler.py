@@ -15,24 +15,24 @@ from aiomisc import bind_socket, threaded
 from aiomisc.service import UDPServer
 from pytest_subtests import SubTests
 
-from logging_journald import check_journal_stream, JournaldLogHandler, Facility
+from logging_journald import Facility, JournaldLogHandler, JournaldTransport, check_journal_stream
 
 
 def test_check_journal_stream() -> None:
     stat = os.stat(sys.stderr.fileno())
-    os.environ['JOURNAL_STREAM'] = f"{stat.st_dev}:{stat.st_ino}"
+    os.environ["JOURNAL_STREAM"] = f"{stat.st_dev}:{stat.st_ino}"
     assert check_journal_stream()
 
-    os.environ['JOURNAL_STREAM'] = ""
+    os.environ["JOURNAL_STREAM"] = ""
     assert not check_journal_stream()
 
-    del os.environ['JOURNAL_STREAM']
+    del os.environ["JOURNAL_STREAM"]
     assert not check_journal_stream()
 
 
 def test_facility() -> None:
     assert Facility(0) == Facility.KERN
-    assert Facility['KERN'] == Facility.KERN
+    assert Facility["KERN"] == Facility.KERN
 
 
 def test_journald_logger(
@@ -47,7 +47,7 @@ def test_journald_logger(
         class FakeJournald(UDPServer):
             VALUE_LEN_STRUCT = struct.Struct("@Q")
 
-            def handle_datagram(
+            async def handle_datagram(
                 self, data: bytes, addr: Tuple[Any, ...],
             ) -> None:
                 result = {}
@@ -102,7 +102,7 @@ def test_journald_logger(
         with bind_socket(
             socket.AF_UNIX, socket.SOCK_DGRAM, address=str(sock_path),
         ) as sock:
-            JournaldLogHandler.SOCKET_PATH = sock_path
+            JournaldTransport.SOCKET_PATH = sock_path
 
             with aiomisc.entrypoint(FakeJournald(sock=sock), loop=loop):
                 loop.run_until_complete(log_writer())
