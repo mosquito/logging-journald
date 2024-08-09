@@ -189,11 +189,13 @@ class JournaldLogHandler(logging.Handler):
 
     __slots__ = ("__facility", "socket", "__identifier")
 
+    SOCKET_PATH = JournaldTransport.SOCKET_PATH
+
     def __init__(
         self, identifier: Optional[str] = None,
         facility: int = Facility.LOCAL7,
         use_message_id: bool = True,
-        socket_path: Union[str, Path] = JournaldTransport.SOCKET_PATH,
+        socket_path: Union[str, Path] = SOCKET_PATH,
     ):
         super().__init__()
         self.transport = JournaldTransport(socket_path=socket_path)
