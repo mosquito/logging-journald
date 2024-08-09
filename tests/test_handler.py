@@ -47,7 +47,7 @@ def test_journald_logger(
         class FakeJournald(UDPServer):
             VALUE_LEN_STRUCT = struct.Struct("@Q")
 
-            def handle_datagram(
+            async def handle_datagram(
                 self, data: bytes, addr: Tuple[Any, ...],
             ) -> None:
                 result = {}
