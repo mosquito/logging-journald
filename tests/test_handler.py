@@ -15,7 +15,7 @@ from aiomisc import bind_socket, threaded
 from aiomisc.service import UDPServer
 from pytest_subtests import SubTests
 
-from logging_journald import check_journal_stream, JournaldLogHandler, Facility
+from logging_journald import check_journal_stream, JournaldLogHandler, Facility, JournaldTransport
 
 
 def test_check_journal_stream() -> None:
@@ -102,7 +102,7 @@ def test_journald_logger(
         with bind_socket(
             socket.AF_UNIX, socket.SOCK_DGRAM, address=str(sock_path),
         ) as sock:
-            JournaldLogHandler.SOCKET_PATH = sock_path
+            JournaldTransport.SOCKET_PATH = sock_path
 
             with aiomisc.entrypoint(FakeJournald(sock=sock), loop=loop):
                 loop.run_until_complete(log_writer())
