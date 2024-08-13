@@ -16,9 +16,9 @@ This example demonstrates how to create an async syslog server that forwards mes
 It also demonstrates how to create a NetConsole server that forwards messages to journald.
 """
 
+
 class JournaldTransportService(UDPServer, ABC):
     transport: JournaldTransport
-
 
     @threaded
     def send_log(self, **kwargs):
