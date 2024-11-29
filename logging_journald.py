@@ -90,7 +90,7 @@ class JournaldTransport:
 
     @classmethod
     def pack(cls, fp: IO[bytes], key: str, value: Any) -> None:
-        if not value:
+        if value is None:
             return
         elif isinstance(value, (int, float)):
             fp.write(cls._encode_short(key, value))
