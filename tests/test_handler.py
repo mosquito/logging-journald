@@ -78,6 +78,7 @@ def test_journald_logger(  # noqa: C901
         def log_writer() -> None:
             log = logging.getLogger("test")
             log.propagate = False
+            log.setLevel(logging.DEBUG)
             log.handlers.clear()
             log.handlers.append(JournaldLogHandler())
 
@@ -98,6 +99,7 @@ def test_journald_logger(  # noqa: C901
             log.critical("Critical test message")
             log.error("Error test message")
             log.log(logging.FATAL, "Fatal test message")
+            log.debug("Debug test message")
 
             try:
                 1 / 0
@@ -112,7 +114,7 @@ def test_journald_logger(  # noqa: C901
             with aiomisc.entrypoint(FakeJournald(sock=sock), loop=loop):
                 loop.run_until_complete(log_writer())
 
-    assert len(logs) == 9
+    assert len(logs) == 10
 
     required_fields = {
         "MESSAGE", "MESSAGE_ID", "MESSAGE_RAW", "PRIORITY",
@@ -212,6 +214,17 @@ def test_journald_logger(  # noqa: C901
         assert message["MESSAGE"] == "Fatal test message"
         assert message["MESSAGE_RAW"] == "Fatal test message"
         assert message["PRIORITY"] == "0"
+        assert message["CODE_FUNC"] == "log_writer"
+        assert int(message["PID"]) == os.getpid()
+
+        for field in required_fields:
+            assert field in message
+
+    with subtests.test("debug message"):
+        message = logs.popleft()
+        assert message["MESSAGE"] == "Debug test message"
+        assert message["MESSAGE_RAW"] == "Debug test message"
+        assert message["PRIORITY"] == "7"
         assert message["CODE_FUNC"] == "log_writer"
         assert int(message["PID"]) == os.getpid()
 
