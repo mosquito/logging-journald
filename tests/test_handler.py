@@ -35,7 +35,7 @@ def test_facility() -> None:
     assert Facility["KERN"] == Facility.KERN
 
 
-def test_journald_logger(
+def test_journald_logger(  # noqa: C901
     loop: asyncio.AbstractEventLoop, subtests: SubTests,
 ) -> None:
     with TemporaryDirectory(dir="/tmp") as tmp_dir:
@@ -78,6 +78,7 @@ def test_journald_logger(
         def log_writer() -> None:
             log = logging.getLogger("test")
             log.propagate = False
+            log.setLevel(logging.DEBUG)
             log.handlers.clear()
             log.handlers.append(JournaldLogHandler())
 
@@ -94,6 +95,12 @@ def test_journald_logger(
                 },
             )
 
+            log.warning("Warning test message")
+            log.critical("Critical test message")
+            log.error("Error test message")
+            log.log(logging.FATAL, "Fatal test message")
+            log.debug("Debug test message")
+
             try:
                 1 / 0
             except ZeroDivisionError:
@@ -107,7 +114,7 @@ def test_journald_logger(
             with aiomisc.entrypoint(FakeJournald(sock=sock), loop=loop):
                 loop.run_until_complete(log_writer())
 
-    assert len(logs) == 5
+    assert len(logs) == 10
 
     required_fields = {
         "MESSAGE", "MESSAGE_ID", "MESSAGE_RAW", "PRIORITY",
@@ -164,6 +171,61 @@ def test_journald_logger(
         assert message["PRIORITY"] == "6"
         assert message["CODE_FUNC"] == "log_writer"
         assert message["EXTRA_FOO"] == "bar"
+        assert int(message["PID"]) == os.getpid()
+
+        for field in required_fields:
+            assert field in message
+
+    with subtests.test("warning message"):
+        message = logs.popleft()
+        assert message["MESSAGE"] == "Warning test message"
+        assert message["MESSAGE_RAW"] == "Warning test message"
+        assert message["PRIORITY"] == "4"
+        assert message["CODE_FUNC"] == "log_writer"
+        assert int(message["PID"]) == os.getpid()
+
+        for field in required_fields:
+            assert field in message
+
+    with subtests.test("critical message"):
+        message = logs.popleft()
+        assert message["MESSAGE"] == "Critical test message"
+        assert message["MESSAGE_RAW"] == "Critical test message"
+        assert message["PRIORITY"] == "0"
+        assert message["CODE_FUNC"] == "log_writer"
+        assert int(message["PID"]) == os.getpid()
+
+        for field in required_fields:
+            assert field in message
+
+    with subtests.test("error message"):
+        message = logs.popleft()
+        assert message["MESSAGE"] == "Error test message"
+        assert message["MESSAGE_RAW"] == "Error test message"
+        assert message["PRIORITY"] == "3"
+        assert message["CODE_FUNC"] == "log_writer"
+        assert int(message["PID"]) == os.getpid()
+
+        for field in required_fields:
+            assert field in message
+
+    with subtests.test("fatal message"):
+        message = logs.popleft()
+        assert message["MESSAGE"] == "Fatal test message"
+        assert message["MESSAGE_RAW"] == "Fatal test message"
+        assert message["PRIORITY"] == "0"
+        assert message["CODE_FUNC"] == "log_writer"
+        assert int(message["PID"]) == os.getpid()
+
+        for field in required_fields:
+            assert field in message
+
+    with subtests.test("debug message"):
+        message = logs.popleft()
+        assert message["MESSAGE"] == "Debug test message"
+        assert message["MESSAGE_RAW"] == "Debug test message"
+        assert message["PRIORITY"] == "7"
+        assert message["CODE_FUNC"] == "log_writer"
         assert int(message["PID"]) == os.getpid()
 
         for field in required_fields:
