@@ -207,7 +207,7 @@ class JournaldLogHandler(logging.Handler):
     def _to_usec(ts: float) -> int:
         return int(ts * 1000000)
 
-    def __format_record(self, record: logging.LogRecord) -> List[Tuple[str, Any]]:
+    def _format_record(self, record: logging.LogRecord) -> List[Tuple[str, Any]]:
         message = self.format(record)
         message_traceback = ""
         message_level = self.LEVELS[record.levelno]
@@ -263,7 +263,7 @@ class JournaldLogHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
-            self.transport.send(self.__format_record(record))
+            self.transport.send(self._format_record(record))
         except Exception:
             self._fallback(record)
 
