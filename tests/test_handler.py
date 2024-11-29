@@ -35,7 +35,7 @@ def test_facility() -> None:
     assert Facility["KERN"] == Facility.KERN
 
 
-def test_journald_logger(
+def test_journald_logger(  # noqa: C901
     loop: asyncio.AbstractEventLoop, subtests: SubTests,
 ) -> None:
     with TemporaryDirectory(dir="/tmp") as tmp_dir:
