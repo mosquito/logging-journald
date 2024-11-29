@@ -199,8 +199,8 @@ class JournaldLogHandler(logging.Handler):
     ):
         super().__init__()
         self.transport = JournaldTransport(socket_path=socket_path)
-        self.__identifier = identifier
-        self.__facility = int(facility)
+        self._identifier = identifier
+        self._facility = int(facility)
         self.use_message_id = use_message_id
 
     @staticmethod
@@ -211,8 +211,8 @@ class JournaldLogHandler(logging.Handler):
         message = self.format(record)
         message_traceback = ""
         message_level = self.LEVELS[record.levelno]
-        message_facility = self.__facility
-        message_identifier = self.__identifier
+        message_facility = self._facility
+        message_identifier = self._identifier
         message_code_string = "{}.{}:{}".format(record.module, record.funcName, record.lineno)
 
         result = [
