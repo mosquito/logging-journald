@@ -187,7 +187,7 @@ class JournaldLogHandler(logging.Handler):
         "threadName": "thread_name",
     })
 
-    __slots__ = ("__facility", "socket", "__identifier")
+    __slots__ = ("_facility", "socket", "_identifier")
 
     SOCKET_PATH = JournaldTransport.SOCKET_PATH
 
