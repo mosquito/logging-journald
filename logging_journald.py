@@ -187,7 +187,7 @@ class JournaldLogHandler(logging.Handler):
         "threadName": "thread_name",
     })
 
-    __slots__ = ("__facility", "socket", "__identifier")
+    __slots__ = ("_facility", "socket", "_identifier")
 
     SOCKET_PATH = JournaldTransport.SOCKET_PATH
 
@@ -199,20 +199,20 @@ class JournaldLogHandler(logging.Handler):
     ):
         super().__init__()
         self.transport = JournaldTransport(socket_path=socket_path)
-        self.__identifier = identifier
-        self.__facility = int(facility)
+        self._identifier = identifier
+        self._facility = int(facility)
         self.use_message_id = use_message_id
 
     @staticmethod
     def _to_usec(ts: float) -> int:
         return int(ts * 1000000)
 
-    def __format_record(self, record: logging.LogRecord) -> List[Tuple[str, Any]]:
+    def _format_record(self, record: logging.LogRecord) -> List[Tuple[str, Any]]:
         message = self.format(record)
         message_traceback = ""
         message_level = self.LEVELS[record.levelno]
-        message_facility = self.__facility
-        message_identifier = self.__identifier
+        message_facility = self._facility
+        message_identifier = self._identifier
         message_code_string = "{}.{}:{}".format(record.module, record.funcName, record.lineno)
 
         result = [
@@ -263,7 +263,7 @@ class JournaldLogHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
-            self.transport.send(self.__format_record(record))
+            self.transport.send(self._format_record(record))
         except Exception:
             self._fallback(record)
 
