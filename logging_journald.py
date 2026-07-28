@@ -47,9 +47,13 @@ class JournaldTransport:
     VALUE_LEN_STRUCT = struct.Struct("@Q")
     SOCKET_PATH = Path("/run/systemd/journal/socket")
 
-    def __init__(self, socket_path: Union[str, Path] = SOCKET_PATH):
+    def __init__(self, socket_path: Optional[Union[str, Path]] = None):
+        # Resolved here rather than as a default argument value: a default is bound
+        # when the class is defined, so overriding SOCKET_PATH on the class (or in a
+        # subclass) would have no effect on it.
+        self.socket_path = Path(socket_path) if socket_path is not None else self.SOCKET_PATH
         self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
-        self.socket.connect(str(self.SOCKET_PATH))
+        self.socket.connect(str(self.socket_path))
 
     if hasattr(os, "memfd_create"):
         @staticmethod
@@ -195,10 +199,14 @@ class JournaldLogHandler(logging.Handler):
         self, identifier: Optional[str] = None,
         facility: int = Facility.LOCAL7,
         use_message_id: bool = True,
-        socket_path: Union[str, Path] = SOCKET_PATH,
+        socket_path: Optional[Union[str, Path]] = None,
     ):
         super().__init__()
-        self.transport = JournaldTransport(socket_path=socket_path)
+        # As in JournaldTransport: resolved here so that overriding SOCKET_PATH on
+        # this class keeps working.
+        self.transport = JournaldTransport(
+            socket_path=socket_path if socket_path is not None else self.SOCKET_PATH,
+        )
         self._identifier = identifier
         self._facility = int(facility)
         self.use_message_id = use_message_id
