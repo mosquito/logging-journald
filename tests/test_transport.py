@@ -101,15 +101,36 @@ def test_ordinary_entry_is_sent_as_a_datagram(journald: FakeJournald) -> None:
     assert journald.arrived_as == "datagram"
 
 
+def test_reconnects_when_the_socket_has_been_replaced(journald: FakeJournald) -> None:
+    """
+    Restarting journald's socket unit replaces the socket file, and a socket connected
+    to the old one is dead for good -- every later send fails with ECONNREFUSED, which
+    is what a long-running process looks like after `systemctl restart` (see #12).
+    """
+    transport = JournaldTransport(socket_path=journald.path)
+    transport.send([("message", "before")])
+    assert journald.receive() == {"MESSAGE": "before"}
+
+    journald.close()
+    os.unlink(journald.path)
+    replacement = FakeJournald(journald.path)
+
+    transport.send([("message", "after")])
+    assert replacement.receive() == {"MESSAGE": "after"}
+    replacement.close()
+
+
 def test_a_journald_that_is_not_listening_raises(journald: FakeJournald) -> None:
     """
     The failure has to reach the caller as itself. Falling back to a file descriptor
     for every OSError hid the reason: with nothing listening, the error raised came
     from sendmsg in the fallback, not from the send that actually failed.
+
+    The socket file is left in place and only the listener goes away, so reconnecting
+    fails the same way and the errno stays the one that describes the problem.
     """
     transport = JournaldTransport(socket_path=journald.path)
     journald.close()
-    os.unlink(journald.path)
 
     with pytest.raises(OSError) as err:
         transport.send([("message", "nobody is listening")])

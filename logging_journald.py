@@ -48,13 +48,21 @@ class JournaldTransport:
     VALUE_LEN_STRUCT = struct.Struct("@Q")
     SOCKET_PATH = Path("/run/systemd/journal/socket")
 
+    # Sending failed because the socket we hold is no longer the one at the path, so a
+    # fresh connection is worth trying.
+    RECONNECT_ERRNOS = frozenset({errno.ECONNREFUSED, errno.ENOTCONN, errno.EPIPE})
+
     def __init__(self, socket_path: Optional[Union[str, Path]] = None):
         # Resolved here rather than as a default argument value: a default is bound
         # when the class is defined, so overriding SOCKET_PATH on the class (or in a
         # subclass) would have no effect on it.
         self.socket_path = Path(socket_path) if socket_path is not None else self.SOCKET_PATH
-        self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
-        self.socket.connect(str(self.socket_path))
+        self.socket = self._connect()
+
+    def _connect(self) -> socket.socket:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        sock.connect(str(self.socket_path))
+        return sock
 
     if hasattr(os, "memfd_create"):
         @staticmethod
@@ -127,6 +135,20 @@ class JournaldTransport:
                 self.pack(fp, key, value)
             value = fp.getvalue()
 
+        try:
+            self._send(value)
+        except OSError as e:
+            if e.errno not in self.RECONNECT_ERRNOS:
+                raise
+            # journald's socket unit can be restarted underneath us, which replaces the
+            # socket file: a socket connected to the old one stays dead, and every send
+            # after that fails. libsystemd avoids this by addressing the path on every
+            # send. Reconnect and try once more.
+            self.socket.close()
+            self.socket = self._connect()
+            self._send(value)
+
+    def _send(self, value: bytes) -> None:
         try:
             self.socket.sendall(value)
         except OSError as e:
