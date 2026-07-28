@@ -1,4 +1,5 @@
 import array
+import errno
 import fcntl
 import logging
 import os
@@ -126,10 +127,14 @@ class JournaldTransport:
                 self.pack(fp, key, value)
             value = fp.getvalue()
 
-        # noinspection PyBroadException
         try:
             self.socket.sendall(value)
-        except OSError:
+        except OSError as e:
+            if e.errno != errno.EMSGSIZE:
+                # Anything else -- journald not listening, socket replaced, permission
+                # denied -- is not something a file descriptor fixes, and going down
+                # that path only replaces the error with one from the fallback.
+                raise
             # the systemd standard way to handle long payloads
             with self.memfd_open("wb+") as mfp:
                 # copy content to memfd

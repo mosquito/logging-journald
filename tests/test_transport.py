@@ -1,4 +1,5 @@
 import array
+import errno
 import os
 import socket
 import struct
@@ -37,11 +38,13 @@ class FakeJournald:
 
     def __init__(self, path: Path) -> None:
         self.path = path
+        self.arrived_as = ""
         self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
         self.socket.bind(str(path))
 
     def receive(self) -> Dict[str, str]:
-        data, ancdata, _, _ = self.socket.recvmsg(1024 * 1024, socket.CMSG_SPACE(4))
+        data, ancdata, _, _ = self.socket.recvmsg(8 * 1024 * 1024, socket.CMSG_SPACE(4))
+        self.arrived_as = "fd" if ancdata else "datagram"
         if ancdata:
             # An oversized entry is handed over as a sealed file descriptor. The whole
             # file description comes with it, offset included, and the sender left the
@@ -80,3 +83,35 @@ def test_socket_path_class_attribute_still_default(
 
     JournaldTransport().send([("message", "hello")])
     assert journald.receive() == {"MESSAGE": "hello"}
+
+
+def test_oversized_entry_is_sent_as_a_file_descriptor(journald: FakeJournald) -> None:
+    message = "x" * (4 * 1024 * 1024)
+
+    JournaldTransport(socket_path=journald.path).send([("message", message)])
+
+    assert journald.receive() == {"MESSAGE": message}
+    assert journald.arrived_as == "fd"
+
+
+def test_ordinary_entry_is_sent_as_a_datagram(journald: FakeJournald) -> None:
+    JournaldTransport(socket_path=journald.path).send([("message", "hello")])
+
+    journald.receive()
+    assert journald.arrived_as == "datagram"
+
+
+def test_a_journald_that_is_not_listening_raises(journald: FakeJournald) -> None:
+    """
+    The failure has to reach the caller as itself. Falling back to a file descriptor
+    for every OSError hid the reason: with nothing listening, the error raised came
+    from sendmsg in the fallback, not from the send that actually failed.
+    """
+    transport = JournaldTransport(socket_path=journald.path)
+    journald.close()
+    os.unlink(journald.path)
+
+    with pytest.raises(OSError) as err:
+        transport.send([("message", "nobody is listening")])
+
+    assert err.value.errno == errno.ECONNREFUSED
