@@ -9,11 +9,12 @@ import sys
 import tempfile
 import traceback
 import uuid
+from collections.abc import Iterable
 from enum import IntEnum, unique
 from io import BytesIO
 from pathlib import Path
 from types import MappingProxyType
-from typing import IO, Any, Iterable, List, Optional, Tuple, Union
+from typing import IO, Any
 
 
 @unique
@@ -61,8 +62,8 @@ class JournaldTransport:
 
     def __init__(
         self,
-        socket_path: Optional[Union[str, Path]] = None,
-        connected: Optional[bool] = None,
+        socket_path: str | Path | None = None,
+        connected: bool | None = None,
     ):
         # Resolved here rather than as a default argument value: a default is bound
         # when the class is defined, so overriding SOCKET_PATH on the class (or in a
@@ -71,20 +72,27 @@ class JournaldTransport:
         self.connected = self.CONNECTED if connected is None else connected
         self.socket = self._connect() if self.connected else self._open()
 
+    # This method is private because it is an internal helper of __init__/send, not public API
     def _open(self) -> socket.socket:
         return socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
 
+    # This method is private because it is an internal helper of __init__/send, not public API
     def _connect(self) -> socket.socket:
         sock = self._open()
         sock.connect(str(self.socket_path))
         return sock
 
     if hasattr(os, "memfd_create"):
+
         @staticmethod
         def memfd_open(*args: Any, **kwargs: Any) -> IO[bytes]:
-            """ Return memfd file-like object """
+            """Return memfd file-like object"""
+            # memfd_create never touches the filesystem, so the name is
+            # just a debug label (visible in /proc/self/fd) and doesn't
+            # need tempfile's path-uniqueness guarantees.
             fd: int = os.memfd_create(
-                tempfile.mktemp(), os.MFD_ALLOW_SEALING,
+                uuid.uuid4().hex,
+                os.MFD_ALLOW_SEALING,
             )
             return os.fdopen(fd, *args, **kwargs)
 
@@ -94,13 +102,13 @@ class JournaldTransport:
             fcntl.fcntl(
                 fp.fileno(),
                 fcntl.F_ADD_SEALS,
-                fcntl.F_SEAL_SHRINK | fcntl.F_SEAL_GROW |
-                fcntl.F_SEAL_WRITE | fcntl.F_SEAL_SEAL,
+                fcntl.F_SEAL_SHRINK | fcntl.F_SEAL_GROW | fcntl.F_SEAL_WRITE | fcntl.F_SEAL_SEAL,
             )
     else:
+
         @staticmethod
         def memfd_open(*args: Any, **kwargs: Any) -> IO[bytes]:
-            """ Return python temporary file object """
+            """Return python temporary file object"""
             return tempfile.TemporaryFile(*args, **kwargs)
 
         @staticmethod
@@ -109,7 +117,7 @@ class JournaldTransport:
 
     @staticmethod
     def _encode_short(key: str, value: Any) -> bytes:
-        return "{}={}\n".format(key.upper(), value).encode()
+        return f"{key.upper()}={value}\n".encode()
 
     @classmethod
     def _encode_long(cls, key: str, value: bytes) -> bytes:
@@ -134,17 +142,17 @@ class JournaldTransport:
             return
         elif isinstance(value, (list, tuple)):
             for idx, item in enumerate(value):
-                cls.pack(fp, "{}_{}".format(key, idx), item)
+                cls.pack(fp, f"{key}_{idx}", item)
             return
         elif isinstance(value, dict):
             for d_key, d_value in value.items():
-                cls.pack(fp, "{}_{}".format(key, d_key), d_value)
+                cls.pack(fp, f"{key}_{d_key}", d_value)
             return
 
         cls.pack(fp, key, str(value).encode())
         return
 
-    def send(self, pairs: Iterable[Tuple[str, Any]]) -> None:
+    def send(self, pairs: Iterable[tuple[str, Any]]) -> None:
         with BytesIO() as fp:
             for key, value in pairs:
                 self.pack(fp, key, value)
@@ -182,15 +190,19 @@ class JournaldTransport:
                 mfp.write(value)
 
                 self.memfd_seal(mfp)
+                # sendmsg's data buffer must carry at least one (possibly empty)
+                # element -- an actually empty list raises EMSGSIZE on some
+                # platforms (observed on macOS) even though the ancillary data
+                # is what matters here.
                 ancillary = [(socket.SOL_SOCKET, socket.SCM_RIGHTS, array.array("i", [mfp.fileno()]))]
                 if self.connected:
-                    self.socket.sendmsg([], ancillary)
+                    self.socket.sendmsg([b""], ancillary)
                 else:
-                    self.socket.sendmsg([], ancillary, 0, str(self.socket_path))
+                    self.socket.sendmsg([b""], ancillary, 0, str(self.socket_path))
 
 
 def check_journal_stream() -> bool:
-    """ Returns True if journald is listening on stderr otherwise False """
+    """Returns True if journald is listening on stderr otherwise False"""
     journal_stream = os.getenv("JOURNAL_STREAM", "")
 
     if not journal_stream:
@@ -206,48 +218,53 @@ def check_journal_stream() -> bool:
 
 
 class JournaldLogHandler(logging.Handler):
-    LEVELS = MappingProxyType({
-        logging.CRITICAL: 2,
-        logging.DEBUG: 7,
-        logging.FATAL: 0,
-        logging.ERROR: 3,
-        logging.INFO: 6,
-        logging.NOTSET: 16,
-        logging.WARNING: 4,
-    })
+    LEVELS = MappingProxyType(
+        {
+            logging.CRITICAL: 2,
+            logging.DEBUG: 7,
+            logging.FATAL: 0,
+            logging.ERROR: 3,
+            logging.INFO: 6,
+            logging.NOTSET: 16,
+            logging.WARNING: 4,
+        }
+    )
 
-    RECORD_FIELDS_MAP = MappingProxyType({
-        "args": "arguments",
-        "created": None,
-        "exc_info": None,
-        "exc_text": None,
-        "filename": None,
-        "funcName": None,
-        "levelname": None,
-        "levelno": None,
-        "lineno": None,
-        "message": None,
-        "module": None,
-        "msecs": None,
-        "msg": "message_raw",
-        "name": "logger_name",
-        "pathname": None,
-        "process": "pid",
-        "processName": "process_name",
-        "relativeCreated": None,
-        "thread": "thread_id",
-        "threadName": "thread_name",
-    })
+    RECORD_FIELDS_MAP = MappingProxyType(
+        {
+            "args": "arguments",
+            "created": None,
+            "exc_info": None,
+            "exc_text": None,
+            "filename": None,
+            "funcName": None,
+            "levelname": None,
+            "levelno": None,
+            "lineno": None,
+            "message": None,
+            "module": None,
+            "msecs": None,
+            "msg": "message_raw",
+            "name": "logger_name",
+            "pathname": None,
+            "process": "pid",
+            "processName": "process_name",
+            "relativeCreated": None,
+            "thread": "thread_id",
+            "threadName": "thread_name",
+        }
+    )
 
     __slots__ = ("_facility", "socket", "_identifier")
 
     SOCKET_PATH = JournaldTransport.SOCKET_PATH
 
     def __init__(
-        self, identifier: Optional[str] = None,
+        self,
+        identifier: str | None = None,
         facility: int = Facility.LOCAL7,
         use_message_id: bool = True,
-        socket_path: Optional[Union[str, Path]] = None,
+        socket_path: str | Path | None = None,
     ):
         super().__init__()
         # As in JournaldTransport: resolved here so that overriding SOCKET_PATH on
@@ -263,13 +280,13 @@ class JournaldLogHandler(logging.Handler):
     def _to_usec(ts: float) -> int:
         return int(ts * 1000000)
 
-    def _format_record(self, record: logging.LogRecord) -> List[Tuple[str, Any]]:
+    def _format_record(self, record: logging.LogRecord) -> list[tuple[str, Any]]:
         message = self.format(record)
         message_traceback = ""
         message_level = self.LEVELS[record.levelno]
         message_facility = self._facility
         message_identifier = self._identifier
-        message_code_string = "{}.{}:{}".format(record.module, record.funcName, record.lineno)
+        message_code_string = f"{record.module}.{record.funcName}:{record.lineno}"
 
         result = [
             ("message", message),
@@ -293,9 +310,14 @@ class JournaldLogHandler(logging.Handler):
         if self.use_message_id:
             message_hash = "\0".join(
                 map(
-                    str, (
-                        message, traceback, message_level, message_facility,
-                        message_identifier, message_code_string,
+                    str,
+                    (
+                        message,
+                        traceback,
+                        message_level,
+                        message_facility,
+                        message_identifier,
+                        message_code_string,
                     ),
                 ),
             )
