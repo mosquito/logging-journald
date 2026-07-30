@@ -1,63 +1,72 @@
-[tool.poetry]
+[project]
 name = "logging-journald"
 version = "0.6.11"
-license = "MIT"
 description = "Pure python logging handler for writing logs to the journald using native protocol"
-authors = ["Dmitry Orlov <me@mosquito.su>"]
+authors = [{ name = "Dmitry Orlov", email = "me@mosquito.su" }]
+requires-python = ">=3.10,<4"
 readme = "README.md"
-homepage = "https://github.com/mosquito/logging-journald"
+license = "MIT"
 classifiers = [
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
     "Operating System :: POSIX :: Linux",
-    "Programming Language :: Python",
+    "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: Implementation :: CPython",
-]
-packages = [
-    { include = "logging_journald.py" },
+    "Typing :: Typed",
 ]
 
-[tool.poetry.urls]
-"Source" = "https://github.com/mosquito/logging-journald"
-"Tracker" = "https://github.com/mosquito/logging-journald/issues"
+[project.urls]
+Homepage = "https://github.com/mosquito/logging-journald"
+Source = "https://github.com/mosquito/logging-journald"
+Tracker = "https://github.com/mosquito/logging-journald/issues"
 
-[tool.poetry.dependencies]
-python = "^3.8"
+[dependency-groups]
+dev = [
+    "pytest",
+    "coveralls",
+    "pytest-cov",
+    "ruff",
+    "ty",
+]
 
-[tool.poetry.group.dev.dependencies]
-pytest = "^7.2.0"
-pytest-subtests = "*"
-aiomisc = "^16.2.10"
-mypy = "^0.991"
-coveralls = "^3.3.1"
-pytest-cov = "^4.0.0"
-pylama = {extras = ["toml"], version = "^8.4.1"}
-setuptools = "^72.1.0"
+[tool.ruff]
+line-length = 119
+extend-exclude = ["README.md"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "C90", "UP"]
+ignore = ["C901"]
+
+[tool.ty.environment]
+python-platform = "linux"
+
+[tool.ty.src]
+exclude = ["examples/"]
+
+[tool.coverage.run]
+branch = true
+source = ["logging_journald"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+]
+show_missing = true
+
+[tool.hatch.build.targets.sdist]
+include = ["logging_journald.py"]
+
+[tool.hatch.build.targets.wheel]
+include = ["logging_journald.py"]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
-
-[tool.mypy]
-allow_subclassing_any = true
-allow_untyped_calls = true
-allow_untyped_decorators = true
-ignore_missing_imports = true
-implicit_reexport = true
-pretty = true
-show_error_codes = true
-strict = true
-warn_return_any = false
-files = "logging_journald.py, tests"
-
-[tool.pylama]
-max_line_length = 119
-skip = "*/.venv/*, */.tox/*, */mypy_cache/*, ./dist, ./docs"
-
-[tool.pylama.linter.mccabe]
-max-complexity = 15
+requires = ["hatchling"]
+build-backend = "hatchling.build"
