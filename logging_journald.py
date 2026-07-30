@@ -52,15 +52,30 @@ class JournaldTransport:
     # fresh connection is worth trying.
     RECONNECT_ERRNOS = frozenset({errno.ECONNREFUSED, errno.ENOTCONN, errno.EPIPE})
 
-    def __init__(self, socket_path: Optional[Union[str, Path]] = None):
+    # Whether to connect the socket once, or address the path on every send the way
+    # libsystemd's sd_journal_sendv() does. Connecting is a little cheaper per message
+    # and is the default because it is what this has always done. Addressing per send
+    # survives the socket at that path being replaced, which is what a socket-activated
+    # journald does every time it has been idle -- see send().
+    CONNECTED = True
+
+    def __init__(
+        self,
+        socket_path: Optional[Union[str, Path]] = None,
+        connected: Optional[bool] = None,
+    ):
         # Resolved here rather than as a default argument value: a default is bound
         # when the class is defined, so overriding SOCKET_PATH on the class (or in a
         # subclass) would have no effect on it.
         self.socket_path = Path(socket_path) if socket_path is not None else self.SOCKET_PATH
-        self.socket = self._connect()
+        self.connected = self.CONNECTED if connected is None else connected
+        self.socket = self._connect() if self.connected else self._open()
+
+    def _open(self) -> socket.socket:
+        return socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
 
     def _connect(self) -> socket.socket:
-        sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        sock = self._open()
         sock.connect(str(self.socket_path))
         return sock
 
@@ -138,19 +153,23 @@ class JournaldTransport:
         try:
             self._send(value)
         except OSError as e:
-            if e.errno not in self.RECONNECT_ERRNOS:
+            if not self.connected or e.errno not in self.RECONNECT_ERRNOS:
                 raise
             # journald's socket unit can be restarted underneath us, which replaces the
             # socket file: a socket connected to the old one stays dead, and every send
-            # after that fails. libsystemd avoids this by addressing the path on every
-            # send. Reconnect and try once more.
+            # after that fails. Reconnect and try once more. Unconnected there is
+            # nothing to repair -- the path is resolved by each send already -- so the
+            # error is the caller's to deal with.
             self.socket.close()
             self.socket = self._connect()
             self._send(value)
 
     def _send(self, value: bytes) -> None:
         try:
-            self.socket.sendall(value)
+            if self.connected:
+                self.socket.sendall(value)
+            else:
+                self.socket.sendto(value, str(self.socket_path))
         except OSError as e:
             if e.errno != errno.EMSGSIZE:
                 # Anything else -- journald not listening, socket replaced, permission
@@ -163,9 +182,11 @@ class JournaldTransport:
                 mfp.write(value)
 
                 self.memfd_seal(mfp)
-                self.socket.sendmsg(
-                    [], [(socket.SOL_SOCKET, socket.SCM_RIGHTS, array.array("i", [mfp.fileno()]))],
-                )
+                ancillary = [(socket.SOL_SOCKET, socket.SCM_RIGHTS, array.array("i", [mfp.fileno()]))]
+                if self.connected:
+                    self.socket.sendmsg([], ancillary)
+                else:
+                    self.socket.sendmsg([], ancillary, 0, str(self.socket_path))
 
 
 def check_journal_stream() -> bool:

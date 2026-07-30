@@ -136,3 +136,67 @@ def test_a_journald_that_is_not_listening_raises(journald: FakeJournald) -> None
         transport.send([("message", "nobody is listening")])
 
     assert err.value.errno == errno.ECONNREFUSED
+
+
+def test_unconnected_transport_sends(journald: FakeJournald) -> None:
+    JournaldTransport(socket_path=journald.path, connected=False).send([("message", "hello")])
+    assert journald.receive() == {"MESSAGE": "hello"}
+
+
+def test_unconnected_transport_needs_no_reconnect_when_the_socket_is_replaced(
+    journald: FakeJournald,
+) -> None:
+    """
+    Why the option exists. A journald that is socket-activated for a namespace exits
+    when idle and its socket is recreated on the next activation, so a connected sender
+    is repeatedly left holding a dead socket. Resolving the path per send, as
+    sd_journal_sendv() does, makes the replacement invisible -- and without the retry,
+    so a send that fails failed for its own reason.
+    """
+    transport = JournaldTransport(socket_path=journald.path, connected=False)
+    transport.send([("message", "before")])
+    assert journald.receive() == {"MESSAGE": "before"}
+    original = transport.socket
+
+    journald.close()
+    os.unlink(journald.path)
+    replacement = FakeJournald(journald.path)
+    try:
+        transport.send([("message", "after")])
+        assert replacement.receive() == {"MESSAGE": "after"}
+        assert transport.socket is original, "the same socket, never reconnected"
+    finally:
+        replacement.close()
+
+
+def test_unconnected_transport_still_hands_over_an_oversized_entry(journald: FakeJournald) -> None:
+    transport = JournaldTransport(socket_path=journald.path, connected=False)
+    transport.send([("message", "x" * (4 * 1024 * 1024))])
+
+    assert journald.receive() == {"MESSAGE": "x" * (4 * 1024 * 1024)}
+    assert journald.arrived_as == "fd"
+
+
+def test_unconnected_transport_raises_when_nobody_is_listening(journald: FakeJournald) -> None:
+    transport = JournaldTransport(socket_path=journald.path, connected=False)
+    journald.close()
+
+    with pytest.raises(OSError) as err:
+        transport.send([("message", "nobody is listening")])
+
+    assert err.value.errno == errno.ECONNREFUSED
+
+
+def test_connected_is_the_default(journald: FakeJournald) -> None:
+    assert JournaldTransport(socket_path=journald.path).connected is True
+
+
+def test_the_default_can_be_set_on_a_subclass(journald: FakeJournald) -> None:
+    """How riact_tools picks it up: the socket path is set that way too."""
+    class Unconnected(JournaldTransport):
+        CONNECTED = False
+
+    transport = Unconnected(socket_path=journald.path)
+    assert transport.connected is False
+    transport.send([("message", "hello")])
+    assert journald.receive() == {"MESSAGE": "hello"}
