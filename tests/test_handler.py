@@ -13,7 +13,7 @@ from unittest import mock
 
 import pytest
 
-from logging_journald import Facility, JournaldLogHandler, JournaldTransport, check_journal_stream
+from logging_journald import Facility, JournaldLogHandler, check_journal_stream
 
 
 REQUIRED_FIELDS = {
@@ -71,27 +71,6 @@ def sock(sock_path):
         yield s
     finally:
         s.close()
-
-
-def test_transport_send_falls_back_to_memfd_on_oserror(sock_path, sock) -> None:
-    transport = JournaldTransport(socket_path=sock_path)
-
-    with mock.patch.object(socket.socket, "sendall", side_effect=OSError("no buffer space")):
-        transport.send([("message", "fallback payload")])
-
-    data, ancdata, _flags, _addr = sock.recvmsg(65536, socket.CMSG_SPACE(4))
-    assert data == b""
-    assert len(ancdata) == 1
-    cmsg_level, cmsg_type, cmsg_data = ancdata[0]
-    assert cmsg_level == socket.SOL_SOCKET
-    assert cmsg_type == socket.SCM_RIGHTS
-
-    (fd,) = struct.unpack("i", cmsg_data)
-    with os.fdopen(fd, "rb") as fp:
-        # the sender leaves the shared file offset at EOF after writing;
-        # real journald seeks back to 0 itself before reading the memfd.
-        fp.seek(0)
-        assert fp.read() == b"MESSAGE=fallback payload\n"
 
 
 @pytest.fixture

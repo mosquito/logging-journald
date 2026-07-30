@@ -3,19 +3,28 @@ import errno
 import os
 import socket
 import struct
+import sys
+from collections.abc import Iterator
 from io import BytesIO
 from pathlib import Path
-from typing import Dict, Iterator
+from tempfile import TemporaryDirectory
 
 import pytest
 
 from logging_journald import JournaldTransport
 
 
+not_linux = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="a connected AF_UNIX SOCK_DGRAM socket reports a closed peer as "
+    "ECONNRESET on this platform, not the ECONNREFUSED that Linux (the only "
+    "platform journald runs on) reports",
+)
+
 VALUE_LEN_STRUCT = struct.Struct("@Q")
 
 
-def decode(data: bytes) -> Dict[str, str]:
+def decode(data: bytes) -> dict[str, str]:
     """Decode the native protocol the way journald reads it."""
     result = {}
     with BytesIO(data) as fp:
@@ -42,7 +51,7 @@ class FakeJournald:
         self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
         self.socket.bind(str(path))
 
-    def receive(self) -> Dict[str, str]:
+    def receive(self) -> dict[str, str]:
         data, ancdata, _, _ = self.socket.recvmsg(8 * 1024 * 1024, socket.CMSG_SPACE(4))
         self.arrived_as = "fd" if ancdata else "datagram"
         if ancdata:
@@ -62,12 +71,16 @@ class FakeJournald:
 
 
 @pytest.fixture
-def journald(tmp_path: Path) -> Iterator[FakeJournald]:
-    server = FakeJournald(tmp_path / "socket")
-    try:
-        yield server
-    finally:
-        server.close()
+def journald() -> Iterator[FakeJournald]:
+    # AF_UNIX paths are capped at ~104-108 bytes; pytest's own tmp_path nests
+    # deep enough (especially on macOS) to blow that limit, so a short /tmp
+    # directory is used instead.
+    with TemporaryDirectory(dir="/tmp") as tmpdir:
+        server = FakeJournald(Path(tmpdir) / "socket")
+        try:
+            yield server
+        finally:
+            server.close()
 
 
 def test_socket_path_argument(journald: FakeJournald) -> None:
@@ -76,7 +89,8 @@ def test_socket_path_argument(journald: FakeJournald) -> None:
 
 
 def test_socket_path_class_attribute_still_default(
-    journald: FakeJournald, monkeypatch: pytest.MonkeyPatch,
+    journald: FakeJournald,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Overriding SOCKET_PATH keeps working, since it is the argument's default."""
     monkeypatch.setattr(JournaldTransport, "SOCKET_PATH", journald.path)
@@ -101,6 +115,7 @@ def test_ordinary_entry_is_sent_as_a_datagram(journald: FakeJournald) -> None:
     assert journald.arrived_as == "datagram"
 
 
+@not_linux
 def test_reconnects_when_the_socket_has_been_replaced(journald: FakeJournald) -> None:
     """
     Restarting journald's socket unit replaces the socket file, and a socket connected
@@ -120,6 +135,7 @@ def test_reconnects_when_the_socket_has_been_replaced(journald: FakeJournald) ->
     replacement.close()
 
 
+@not_linux
 def test_a_journald_that_is_not_listening_raises(journald: FakeJournald) -> None:
     """
     The failure has to reach the caller as itself. Falling back to a file descriptor
@@ -193,6 +209,7 @@ def test_connected_is_the_default(journald: FakeJournald) -> None:
 
 def test_the_default_can_be_set_on_a_subclass(journald: FakeJournald) -> None:
     """How riact_tools picks it up: the socket path is set that way too."""
+
     class Unconnected(JournaldTransport):
         CONNECTED = False
 
