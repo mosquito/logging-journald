@@ -1,4 +1,5 @@
 import array
+import errno
 import fcntl
 import logging
 import os
@@ -47,9 +48,36 @@ class JournaldTransport:
     VALUE_LEN_STRUCT = struct.Struct("@Q")
     SOCKET_PATH = Path("/run/systemd/journal/socket")
 
-    def __init__(self, socket_path: Union[str, Path] = SOCKET_PATH):
-        self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
-        self.socket.connect(str(self.SOCKET_PATH))
+    # Sending failed because the socket we hold is no longer the one at the path, so a
+    # fresh connection is worth trying.
+    RECONNECT_ERRNOS = frozenset({errno.ECONNREFUSED, errno.ENOTCONN, errno.EPIPE})
+
+    # Whether to connect the socket once, or address the path on every send the way
+    # libsystemd's sd_journal_sendv() does. Connecting is a little cheaper per message
+    # and is the default because it is what this has always done. Addressing per send
+    # survives the socket at that path being replaced, which is what a socket-activated
+    # journald does every time it has been idle -- see send().
+    CONNECTED = True
+
+    def __init__(
+        self,
+        socket_path: Optional[Union[str, Path]] = None,
+        connected: Optional[bool] = None,
+    ):
+        # Resolved here rather than as a default argument value: a default is bound
+        # when the class is defined, so overriding SOCKET_PATH on the class (or in a
+        # subclass) would have no effect on it.
+        self.socket_path = Path(socket_path) if socket_path is not None else self.SOCKET_PATH
+        self.connected = self.CONNECTED if connected is None else connected
+        self.socket = self._connect() if self.connected else self._open()
+
+    def _open(self) -> socket.socket:
+        return socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+
+    def _connect(self) -> socket.socket:
+        sock = self._open()
+        sock.connect(str(self.socket_path))
+        return sock
 
     if hasattr(os, "memfd_create"):
         @staticmethod
@@ -122,19 +150,43 @@ class JournaldTransport:
                 self.pack(fp, key, value)
             value = fp.getvalue()
 
-        # noinspection PyBroadException
         try:
-            self.socket.sendall(value)
-        except OSError:
+            self._send(value)
+        except OSError as e:
+            if not self.connected or e.errno not in self.RECONNECT_ERRNOS:
+                raise
+            # journald's socket unit can be restarted underneath us, which replaces the
+            # socket file: a socket connected to the old one stays dead, and every send
+            # after that fails. Reconnect and try once more. Unconnected there is
+            # nothing to repair -- the path is resolved by each send already -- so the
+            # error is the caller's to deal with.
+            self.socket.close()
+            self.socket = self._connect()
+            self._send(value)
+
+    def _send(self, value: bytes) -> None:
+        try:
+            if self.connected:
+                self.socket.sendall(value)
+            else:
+                self.socket.sendto(value, str(self.socket_path))
+        except OSError as e:
+            if e.errno != errno.EMSGSIZE:
+                # Anything else -- journald not listening, socket replaced, permission
+                # denied -- is not something a file descriptor fixes, and going down
+                # that path only replaces the error with one from the fallback.
+                raise
             # the systemd standard way to handle long payloads
             with self.memfd_open("wb+") as mfp:
                 # copy content to memfd
                 mfp.write(value)
 
                 self.memfd_seal(mfp)
-                self.socket.sendmsg(
-                    [], [(socket.SOL_SOCKET, socket.SCM_RIGHTS, array.array("i", [mfp.fileno()]))],
-                )
+                ancillary = [(socket.SOL_SOCKET, socket.SCM_RIGHTS, array.array("i", [mfp.fileno()]))]
+                if self.connected:
+                    self.socket.sendmsg([], ancillary)
+                else:
+                    self.socket.sendmsg([], ancillary, 0, str(self.socket_path))
 
 
 def check_journal_stream() -> bool:
@@ -195,10 +247,14 @@ class JournaldLogHandler(logging.Handler):
         self, identifier: Optional[str] = None,
         facility: int = Facility.LOCAL7,
         use_message_id: bool = True,
-        socket_path: Union[str, Path] = SOCKET_PATH,
+        socket_path: Optional[Union[str, Path]] = None,
     ):
         super().__init__()
-        self.transport = JournaldTransport(socket_path=socket_path)
+        # As in JournaldTransport: resolved here so that overriding SOCKET_PATH on
+        # this class keeps working.
+        self.transport = JournaldTransport(
+            socket_path=socket_path if socket_path is not None else self.SOCKET_PATH,
+        )
         self._identifier = identifier
         self._facility = int(facility)
         self.use_message_id = use_message_id
