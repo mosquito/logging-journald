@@ -1,5 +1,7 @@
 import array
 import errno
+import fcntl
+import importlib
 import os
 import socket
 import struct
@@ -11,10 +13,11 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
+import logging_journald
 from logging_journald import JournaldTransport
 
 
-not_linux = pytest.mark.skipif(
+linux_only = pytest.mark.skipif(
     sys.platform != "linux",
     reason="a connected AF_UNIX SOCK_DGRAM socket reports a closed peer as "
     "ECONNRESET on this platform, not the ECONNREFUSED that Linux (the only "
@@ -115,7 +118,7 @@ def test_ordinary_entry_is_sent_as_a_datagram(journald: FakeJournald) -> None:
     assert journald.arrived_as == "datagram"
 
 
-@not_linux
+@linux_only
 def test_reconnects_when_the_socket_has_been_replaced(journald: FakeJournald) -> None:
     """
     Restarting journald's socket unit replaces the socket file, and a socket connected
@@ -135,7 +138,7 @@ def test_reconnects_when_the_socket_has_been_replaced(journald: FakeJournald) ->
     replacement.close()
 
 
-@not_linux
+@linux_only
 def test_a_journald_that_is_not_listening_raises(journald: FakeJournald) -> None:
     """
     The failure has to reach the caller as itself. Falling back to a file descriptor
@@ -217,3 +220,27 @@ def test_the_default_can_be_set_on_a_subclass(journald: FakeJournald) -> None:
     assert transport.connected is False
     transport.send([("message", "hello")])
     assert journald.receive() == {"MESSAGE": "hello"}
+
+
+@linux_only
+def test_falls_back_to_a_plain_tempfile_when_sealing_is_unavailable(
+    journald: FakeJournald,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Some Python builds (observed with python-build-standalone on GitHub Actions'
+    ubuntu-latest, for several versions) have os.memfd_create but not fcntl's
+    sealing constants -- memfd_create alone is not enough to assume sealing works.
+    """
+    monkeypatch.delattr(fcntl, "F_ADD_SEALS", raising=False)
+    reloaded = importlib.reload(logging_journald)
+    try:
+        transport = reloaded.JournaldTransport(socket_path=journald.path)
+        message = "x" * (4 * 1024 * 1024)
+
+        transport.send([("message", message)])
+
+        assert journald.receive() == {"MESSAGE": message}
+        assert journald.arrived_as == "fd"
+    finally:
+        importlib.reload(logging_journald)

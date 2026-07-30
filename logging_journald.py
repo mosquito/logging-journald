@@ -82,7 +82,12 @@ class JournaldTransport:
         sock.connect(str(self.socket_path))
         return sock
 
-    if hasattr(os, "memfd_create"):
+    # F_ADD_SEALS is exposed by the fcntl module only when it was defined in the
+    # Linux headers Python was built against; some Python builds (observed with
+    # python-build-standalone on GitHub Actions' ubuntu-latest, for several
+    # versions) have memfd_create but not the sealing constants, so both are
+    # checked rather than assuming one implies the other.
+    if hasattr(os, "memfd_create") and hasattr(fcntl, "F_ADD_SEALS"):
 
         @staticmethod
         def memfd_open(*args: Any, **kwargs: Any) -> IO[bytes]:
